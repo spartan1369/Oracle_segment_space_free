@@ -1,0 +1,92 @@
+CREATE
+  OR REPLACE PROCEDURE  SEGMENT_FREE_proc(  
+  v_segmentname  in varchar2 ,
+  v_owner      IN VARCHAR2 DEFAULT USER,
+  v_type       IN VARCHAR2 DEFAULT 'TABLE' 
+)
+AS  
+l_owner varchar2(300);
+l_segmentname varchar2(300);
+l_fs1_bytes NUMBER ;
+l_fs2_bytes NUMBER ;
+l_fs3_bytes NUMBER ;
+l_fs4_bytes NUMBER ;
+l_fs1_blocks NUMBER ;
+l_fs2_blocks NUMBER ;
+l_fs3_blocks NUMBER ;
+l_fs4_blocks NUMBER ;
+l_full_bytes NUMBER ;
+l_full_blocks NUMBER ;
+l_unformatted_bytes NUMBER;
+l_unformatted_blocks NUMBER;
+BEGIN
+  /* check v_owner is ok */
+  SELECT username INTO l_owner FROM all_users 
+  WHERE upper(username)=upper(v_owner) ;
+    /*check v_segmentname is ok */
+  CASE  UPPER(V_TYPE) 
+      WHEN 'TABLE' THEN 
+      SELECT   table_name  INTO l_segmentname 
+      FROM all_tables
+      WHERE owner=l_owner AND upper(table_name)=upper(v_segmentname);
+    WHEN 'INDEX'  THEN 
+        SELECT  INDEX_name  INTO l_segmentname 
+      FROM all_INDEXES 
+      WHERE owner=l_owner AND upper(INDEX_name)=upper(v_segmentname);
+    ELSE 
+      raise_application_error(-20600,'the v_type is only TABLE or INDEX !!!');
+  END CASE ;
+  /* There is free space in the segment .*/
+  dbms_space.space_usage(
+  segment_owner=> l_owner ,
+  segment_name=>  l_segmentname ,
+  segment_type=>upper(v_type),
+  fs1_bytes=>l_fs1_bytes,
+  fs1_blocks=>l_fs1_blocks,
+  fs2_bytes=>l_fs2_bytes,
+  fs2_blocks=>l_fs2_blocks,
+  fs3_bytes=>l_fs3_bytes,
+  fs3_blocks=>l_fs3_blocks,
+  fs4_bytes=>l_fs4_bytes,
+  fs4_blocks=>l_fs4_blocks,
+  full_bytes=>l_full_bytes,
+  full_blocks=>l_full_blocks,
+  unformatted_bytes=>l_unformatted_bytes,
+  unformatted_blocks=>l_unformatted_blocks 
+  );
+  /*show free blocks and free bytes */
+  dbms_output.put_line('user = '||l_owner||';');
+  dbms_output.put_line('SEGMENT_NAME ='||l_segmentname||';');
+  dbms_output.put_line('segment_type='||upper(v_type)||';');
+  dbms_output.put_line('0-25%   Free blocks = '||l_fs1_blocks||'         Bytes ='||l_fs1_bytes);
+  dbms_output.put_line('25-50%  Free blocks = '||l_fs2_blocks||'         Bytes ='||l_fs2_bytes);
+  dbms_output.put_line('50-75%  Free blocks = '||l_fs3_blocks||'         Bytes ='||l_fs3_bytes);
+  dbms_output.put_line('75-100% Free blocks = '||l_fs4_blocks||'        Bytes ='||l_fs4_bytes);
+  dbms_output.put_line('Full    Free blocks = '||l_unformatted_blocks||'         Bytes ='||l_unformatted_bytes);
+
+/*to update the record in the result */
+DELETE FROM SEGMENT_FREE_table WHERE OWNER=l_owner AND SEGMENT_NAME=l_segmentname AND segment_type=upper(v_type) ;
+INSERT INTO SEGMENT_FREE_table (create_time,OWNER,SEGMENT_NAME,segment_type,
+free_025_blocks,free_025_bytes,
+free_2550_blocks,free_2550_bytes,
+free_5075_blocks,free_5075_bytes,
+free_75100_blocks,free_75100_bytes,
+free_full_blocks,free_full_bytes)
+VALUES(SYSTIMESTAMP,l_owner,l_segmentname,upper(v_type),
+l_fs1_blocks,l_fs1_bytes,
+l_fs2_blocks,l_fs2_bytes,
+l_fs3_blocks,l_fs3_bytes,
+l_fs4_blocks,l_fs4_bytes,
+l_unformatted_blocks,l_unformatted_bytes);
+COMMIT;
+/*if there is exception in the PROCEDURE , it will tell you .*/
+EXCEPTION WHEN OTHERS THEN 
+ROLLBACK;
+dbms_output.put_line('the procedure has a error, this is exception.');
+raise_application_error(-20601,SQLERRM);
+END ;
+/
+
+
+ 
+
